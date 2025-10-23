@@ -11,9 +11,11 @@ import matplotlib.pyplot as plt
 
 
 transform = T.Compose([
-    T.ToTensor(),
     T.Resize((32,32)),    # optional, sizes should already match 32X32
-    T.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])  # [-1, 1] range
+    T.RandomHorizontalFlip(),
+    T.RandomVerticalFlip(),
+    T.ToTensor(),
+    T.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])  # [-1, 1] range normalization
 ])
 
 transform_basic = T.ToTensor()
@@ -23,13 +25,13 @@ train_loader = torch.utils.data.DataLoader(train_data, batch_size=64, shuffle=Tr
 test_data = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
 test_loader = torch.utils.data.DataLoader(test_data, batch_size=64, shuffle=False)
 
-dataset = CIFAR10(root='./data', train=True,download=True,transform=transform_basic)
-indx = random.randint(0,len(dataset)-1)
-imgTensor, label = dataset[indx]
+indx = random.randint(0,len(train_data)-1)
+imgTensor, label = train_data[indx]
 print(label)
 img = imgTensor.permute(1,2,0).numpy()
+print(img)
 plt.imshow(img)
-plt.title(f"Label: {dataset.classes[label]}")
+plt.title(f"Label: {train_data.classes[label]}")
 plt.axis('off')
 plt.savefig('img.png')
 
@@ -48,7 +50,7 @@ def addNoise(x0, t, betas):
     return x_t,noise
 
 figure = plt.figure(figsize=(15, 15))
-cols, rows = 4,5
+cols, rows = 10,10
 
 x0_batch = imgTensor.unsqueeze(0).repeat(200, 1, 1, 1)
 
