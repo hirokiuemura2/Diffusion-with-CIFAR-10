@@ -6,9 +6,9 @@ import torch.nn.functional as F
 import numpy as np
 from torchvision.datasets import CIFAR10
 import random
-
 import matplotlib.pyplot as plt
 
+device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 
 transform = T.Compose([
     T.Resize((32,32)),    # optional, sizes should already match 32X32
@@ -40,16 +40,48 @@ def addNoise(x0, t, betas):
 
     return x_t,noise
 
+class UNet(nn.Module):
+    def __init__(self, in_channels=3, out_channels=3):
+        super().__init__()  # call the parent constructor
 
-#image example
-indx = random.randint(0,len(train_data)-1)
-imgTensor, label = train_data[indx]
+        self.in_channels = in_channels
+        self.out_channels = out_channels
 
-x0_batch = imgTensor.unsqueeze(0).repeat(200, 1, 1, 1)
+        self.down_layers = nn.ModuleList(
+            [
+                nn.Conv2d(in_channels, 32, kernel_size=5, padding=2),
+                nn.Conv2d(32, 64, kernel_size=5, padding=2),
+                nn.Conv2d(64, 64, kernel_size=5, padding=2),
+            ]
+        )
+        self.up_layers = torch.nn.ModuleList(
+            [
+                nn.Conv2d(64, 64, kernel_size=5, padding=2),
+                nn.Conv2d(64, 32, kernel_size=5, padding=2),
+                nn.Conv2d(32, out_channels, kernel_size=5, padding=2),
+            ]
+        )
+        self.act = nn.SiLU()
+        self.downscale = nn.MaxPool2d(2)
+        self.upscale = nn.Upsample(scale_factor=2)
+    
+    def forward(self, x):
+        h = []
+        for i, l in enumerate(self.down_layers):
+            x = self.act(l(x))  # Through the layer and the activation function
+            if i < 2:  # For all but the third (final) down layer:
+                h.append(x)  # Storing output for skip connection
+                x = self.downscale(x)  # Downscale ready for the next layer
 
-t = torch.linspace(0, 199,200).long()
-x0_batch,noise = addNoise(x0_batch,t,betaSchedule)
+        for i, l in enumerate(self.up_layers):
+            if i > 0:  # For all except the first up layer
+                x = self.upscale(x)  # Upscale
+                x += h.pop()  # Fetching stored output (skip connection)
+            x = self.act(l(x))  # Through the layer and the activation function
 
-x_min = x0_batch.view(x0_batch.size(0), -1).min(dim=1)[0].view(-1,1,1,1)
-x_max = x0_batch.view(x0_batch.size(0), -1).max(dim=1)[0].view(-1,1,1,1)
-x0_norm = (x0_batch - x_min) / (x_max - x_min)
+        return x
+
+
+net = UNet().to(device)
+print(sum([p.numel() for p in net.parameters()]))
+
