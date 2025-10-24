@@ -58,10 +58,10 @@ plt.savefig('img.png')
 figure = plt.figure(figsize=(15, 15))
 cols, rows = 10,10
 
-for i in range(1, cols * rows + 1):
-    img = x0_norm[i+99]
+for i in range(0, cols * rows):
+    img = x0_norm[i+100]
     label = f"t = {i}"
-    figure.add_subplot(rows, cols, i)
+    figure.add_subplot(rows, cols, i + 1)
     plt.title(label)
     plt.axis("off")
     plt.imshow(img.permute(1,2,0).squeeze(), cmap="gray")
