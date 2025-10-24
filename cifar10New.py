@@ -4,9 +4,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from torchvision.datasets import CIFAR10
+from torchvision.datasets import CIFAR10 as CIFAR10
 import random
 import matplotlib.pyplot as plt
+from torch.utils.data import DataLoader
 
 device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 
@@ -18,25 +19,18 @@ transform = T.Compose([
     T.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])  # [-1, 1] range normalization
 ])
 
-transform_basic = T.ToTensor()
-
-train_data = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
-train_loader = torch.utils.data.DataLoader(train_data, batch_size=64, shuffle=True)
-test_data = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
-test_loader = torch.utils.data.DataLoader(test_data, batch_size=64, shuffle=False)
-
 
 T = 200
 betaSchedule = torch.linspace(0.0001, 0.02, T)
 
 def addNoise(x0, t, betas):
-    alphas = 1.0 - betas
+    alphas = (1.0 - betas).to(device)
     alphas_cumulProd = torch.cumprod(alphas, dim=0)
 
-    a_t = alphas_cumulProd[t].view(-1,1,1,1)
+    a_t = alphas_cumulProd[t].view(-1,1,1,1).to(device)
     noise = torch.randn_like(x0)
 
-    x_t = torch.sqrt(a_t) * x0 + torch.sqrt(1-a_t) * noise
+    x_t = (torch.sqrt(a_t) * x0 + torch.sqrt(1-a_t) * noise)
 
     return x_t,noise
 
@@ -81,7 +75,44 @@ class UNet(nn.Module):
 
         return x
 
+batch_size = 64
+n_epochs = 2
+
+train_data = CIFAR10(root='./data', train=True, download=True, transform=transform)
+train_loader = DataLoader(train_data, batch_size=64, shuffle=True)
+test_data = CIFAR10(root='./data', train=False, download=True, transform=transform)
+test_loader = DataLoader(test_data, batch_size=64, shuffle=False)
 
 net = UNet().to(device)
-print(sum([p.numel() for p in net.parameters()]))
+loss_fn = nn.MSELoss()
+opt = torch.optim.Adam(net.parameters(), lr=1e-3)
+losses = []
 
+
+for epoch in range(n_epochs):
+
+    for x, y in train_loader:
+        # Get some data and prepare the corrupted version
+        x = x.to(device)  # Data on the GPU
+        y = y.to(device)
+        t = torch.randint(0, T, (x.size(0),), device=x.device)
+        # noise_amount = torch.rand(x.shape[0]).to(device)  # Pick random noise amounts
+        noisy_x, noise = addNoise(x, t, betaSchedule)  # Create our noisy x
+
+        # Get the model prediction
+        pred = net(noisy_x)
+
+        # Calculate the loss
+        loss = loss_fn(pred, noise)  # How close is the output to the true 'clean' x?
+
+        # Backprop and update the params:
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
+
+        # Store the loss for later
+        losses.append(loss.item())
+
+    # Print our the average of the loss values for this epoch:
+    avg_loss = sum(losses[-len(train_loader) :]) / len(train_loader)
+    print(f"Finished epoch {epoch}. Average loss for this epoch: {avg_loss:05f}")
