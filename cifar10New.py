@@ -116,3 +116,24 @@ for epoch in range(n_epochs):
     # Print our the average of the loss values for this epoch:
     avg_loss = sum(losses[-len(train_loader) :]) / len(train_loader)
     print(f"Finished epoch {epoch}. Average loss for this epoch: {avg_loss:05f}")
+    
+    # Fetch some data
+x, y = next(iter(train_loader))
+x = x[:8]  # Only using the first 8 for easy plotting
+
+# Corrupt with a range of amounts
+t = torch.randint(0,T,(x.size(0),), device=x.device)
+noised_x = addNoise(x, t, betaSchedule)
+
+# Get the model predictions
+with torch.no_grad():
+    preds = net(noised_x.to(device)).detach().cpu()
+
+# Plot
+fig, axs = plt.subplots(3, 1, figsize=(12, 7))
+axs[0].set_title("Input data")
+axs[0].imshow(torchvision.utils.make_grid(x)[0].clip(0, 1), cmap="Greys")
+axs[1].set_title("Corrupted data")
+axs[1].imshow(torchvision.utils.make_grid(noised_x)[0].clip(0, 1), cmap="Greys")
+axs[2].set_title("Network Predictions")
+axs[2].imshow(torchvision.utils.make_grid(preds)[0].clip(0, 1), cmap="Greys")
