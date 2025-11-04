@@ -22,6 +22,7 @@ class UNet(nn.Module):
 
         self.in_channels = in_channels
         self.out_channels = out_channels
+        self.mid_channels = mid_channels
         self.time_emb = nn.Sequential(
             nn.Linear(2 * mid_channels, 8 * mid_channels),
             nn.SiLU(),
@@ -30,59 +31,63 @@ class UNet(nn.Module):
         self.prompt_emb = nn.Embedding(10, mid_channels * 2)
 
         self.down_layers = nn.ModuleList(
-            nn.Sequential(
-                nn.Conv2d(in_channels, mid_channels, kernel_size=5, padding=2),
-                nn.BatchNorm2d(mid_channels),
-                nn.SiLU()
-            ),
-            nn.Sequential(
-                nn.Conv2d(mid_channels, mid_channels * 2, kernel_size=5, padding=2),
-                nn.BatchNorm2d(mid_channels * 2),
-                nn.SiLU()
-            ),
-            nn.Sequential(
-                nn.Conv2d(mid_channels * 2, mid_channels * 2, kernel_size=5, padding=2),
-                nn.BatchNorm2d(mid_channels * 2),
-                nn.SiLU()
-            ),
-            nn.Sequential(
-                nn.Conv2d(mid_channels * 2, mid_channels * 2, kernel_size=5, padding=2),
-                nn.BatchNorm2d(mid_channels * 2),
-                nn.SiLU()
-            )
+            [
+                nn.Sequential(
+                    nn.Conv2d(in_channels, mid_channels, kernel_size=5, padding=2),
+                    nn.BatchNorm2d(mid_channels),
+                    nn.SiLU()
+                ),
+                nn.Sequential(
+                    nn.Conv2d(mid_channels, mid_channels * 2, kernel_size=5, padding=2),
+                    nn.BatchNorm2d(mid_channels * 2),
+                    nn.SiLU()
+                ),
+                nn.Sequential(
+                    nn.Conv2d(mid_channels * 2, mid_channels * 2, kernel_size=5, padding=2),
+                    nn.BatchNorm2d(mid_channels * 2),
+                    nn.SiLU()
+                ),
+                nn.Sequential(
+                    nn.Conv2d(mid_channels * 2, mid_channels * 2, kernel_size=5, padding=2),
+                    nn.BatchNorm2d(mid_channels * 2),
+                    nn.SiLU()
+                )
+            ]
+            
         )
         self.up_layers = torch.nn.ModuleList(
-            nn.Sequential(
-                nn.Conv2d(mid_channels * 2, mid_channels * 2, kernel_size=5, padding=2),
-                nn.BatchNorm2d(mid_channels * 2),
-                nn.SiLU()
-            ),
-            nn.Sequential(
-                nn.Conv2d(mid_channels * 4, mid_channels * 2, kernel_size=5, padding=2),
-                nn.BatchNorm2d(mid_channels * 2),
-                nn.SiLU()
-            ),
-            nn.Sequential(
-                nn.Conv2d(mid_channels * 3, mid_channels, kernel_size=5, padding=2),
-                nn.BatchNorm2d(mid_channels),
-                nn.SiLU()
-            ),
-            nn.Sequential(
-                nn.Conv2d(mid_channels, out_channels, kernel_size=5, padding=2),
-                nn.BatchNorm2d(out_channels),
-                nn.SiLU()
-            )
+            [
+                nn.Sequential(
+                    nn.Conv2d(mid_channels * 2, mid_channels * 2, kernel_size=5, padding=2),
+                    nn.BatchNorm2d(mid_channels * 2),
+                    nn.SiLU()
+                ),
+                nn.Sequential(
+                    nn.Conv2d(mid_channels * 4, mid_channels * 2, kernel_size=5, padding=2),
+                    nn.BatchNorm2d(mid_channels * 2),
+                    nn.SiLU()
+                ),
+                nn.Sequential(
+                    nn.Conv2d(mid_channels * 4, mid_channels, kernel_size=5, padding=2),
+                    nn.BatchNorm2d(mid_channels),
+                    nn.SiLU()
+                ),
+                nn.Sequential(
+                    nn.Conv2d(mid_channels * 2, out_channels * 2, kernel_size=5, padding=2),
+                    nn.BatchNorm2d(out_channels * 2),
+                    nn.SiLU()
+                )
+            ]
         )
         self.act = nn.SiLU()
         self.downscale = nn.MaxPool2d(2)
         self.upscale = nn.Upsample(scale_factor=2, mode='nearest')
         self.dropout = nn.Dropout2d(0.1)
-        self.finalLayer = nn.Conv2d(out_channels, out_channels, kernel_size=5, padding=2)
-        self.norm1 = nn.BatchNorm2d(mid_channels * 2)
-        self.norm2 = nn.BatchNorm2d(mid_channels)
+        self.finalLayer = nn.Conv2d(out_channels * 2, out_channels, kernel_size=5, padding=2)
     
     def forward(self, x, t, T, prompt):
-        t_emb = sinEmb(t, T, self.down_layers[0].out_channels * 2)
+        # use stored mid_channels instead of accessing attributes on Sequential
+        t_emb = sinEmb(t, T, self.mid_channels * 2)
         t_emb = self.time_emb(t_emb)
         p_emb = self.prompt_emb(prompt)
         h = []
@@ -90,17 +95,15 @@ class UNet(nn.Module):
             x = l(x)  # Through the layer and the activation function
             if i == 1:
                 x = x + t_emb[:,:,None,None] + p_emb[:,:,None,None]   #time embedding layer
-            if i < 2:  # For all but the third (final) down layer:
+            if i < 3:  # For all but the third (final) down layer:
                 h.append(x)  # Storing output for skip connection
                 x = self.downscale(x)  # Downscale ready for the next layer
         x = self.dropout(x)
 
         for i, l in enumerate(self.up_layers):
-            if i in (1,2):  # For all except the first up layer
+            if i > 0:  # For all except the first up layer
                 x = self.upscale(x)  # Upscale
                 x = torch.cat([x, h.pop()], dim=1) # Fetching stored output (skip connection)
             x = l(x)
-            x = self.norm1(x) if i < 2 else self.norm2(x)
-            x = self.act(l(x))  # Through the layer and the activation function
         x = self.finalLayer(x)
         return x
