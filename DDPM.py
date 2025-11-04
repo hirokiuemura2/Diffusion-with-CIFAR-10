@@ -40,9 +40,9 @@ class UNet(nn.Module):
         self.up_layers = torch.nn.ModuleList(
             [
                 nn.Conv2d(mid_channels * 2, mid_channels * 2, kernel_size=5, padding=2),
-                nn.Conv2d(mid_channels * 4, mid_channels * 2, kernel_size=5, padding=2),
-                nn.Conv2d(mid_channels * 3, mid_channels, kernel_size=5, padding=2),
-                nn.Conv2d(mid_channels, out_channels, kernel_size=5, padding=2),
+                nn.Conv2d(mid_channels * 2, mid_channels * 2, kernel_size=5, padding=2),
+                nn.Conv2d(mid_channels * 2, mid_channels, kernel_size=5, padding=2),
+                nn.Conv2d(mid_channels , out_channels, kernel_size=5, padding=2, bias = True),
             ]
         )
         self.act = nn.SiLU()
@@ -59,15 +59,23 @@ class UNet(nn.Module):
             x = self.act(l(x))  # Through the layer and the activation function
             if i == 1:
                 x = x + t_emb[:,:,None,None] + p_emb[:,:,None,None]   #time embedding layer
-            if i < 2:  # For all but the third (final) down layer:
+            if i < 3:  # For all but the third (final) down layer:
                 h.append(x)  # Storing output for skip connection
                 x = self.downscale(x)  # Downscale ready for the next layer
         x = self.dropout(x)
 
         for i, l in enumerate(self.up_layers):
-            if i in (1,2):  # For all except the first up layer
+            if i > 0:  # For all except the first up layer
                 x = self.upscale(x)  # Upscale
-                x = torch.cat([x, h.pop()], dim=1) # Fetching stored output (skip connection)
-            x = self.act(l(x))  # Through the layer and the activation function
+                # x = torch.cat([x, h.pop()], dim=1) # Fetching stored output (skip connection)
+            x = l(x)
+            if i != len(self.up_layers) - 1:
+                x = self.act(x)
+            #try: normalize, activate, then convolute again? or: just normalize and convolute down to output?
+        # print("Pre-tanh min/max:", x.min().item(), x.max().item())  # Debug line
+        # x = nn.Linear(in_features=x.shape[1], out_features=self.out_channels)(x.permute(0,2,3,1)).permute(0,3,1,2)
+        return x
 
-        return xk
+    def init_weights(self):
+        nn.init.xavier_uniform_(self.up_layers[-1].weight)
+        nn.init.constant_(self.up_layers[-1].bias, -0.5)
