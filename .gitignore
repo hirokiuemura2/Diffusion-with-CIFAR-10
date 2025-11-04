@@ -4,3 +4,9 @@ data/
 *.jpg
 __pycache__/
 *.pth
+bin/
+include/
+lib/
+share/
+pyvenv.cfg
+
