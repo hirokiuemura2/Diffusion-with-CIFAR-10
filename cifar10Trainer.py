@@ -33,7 +33,7 @@ def addNoise(x0, t, betas):
     return x_t,noise
 
 batch_size = 64
-n_epochs = 5
+n_epochs = 2
 T = 400
 betaSchedule = torch.linspace(0.0001, 0.02, T).to(device)
 losses = []
@@ -44,6 +44,7 @@ test_data = CIFAR10(root='./data', train=False, download=True, transform=transfo
 test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False)
 
 net = UNet().to(device)
+net.init_weights()
 loss_fn = nn.MSELoss()
 opt = torch.optim.Adam(net.parameters(), lr=5e-4)
 
@@ -60,9 +61,8 @@ for epoch in range(n_epochs):
         t = torch.randint(0, T, (x.size(0),), device=x.device)
         # noise_amount = torch.rand(x.shape[0]).to(device)  # Pick random noise amounts
         noisy_x, noise = addNoise(x, t, betaSchedule)  # Create our noisy x
-
         # Get the model prediction
-        pred = net(noisy_x, t, y)
+        pred = net(noisy_x, t, T, y)
 
         # Calculate the loss
         loss = loss_fn(pred, noise)  # How close is the output to the true 'clean' x?
@@ -95,9 +95,11 @@ for epoch in range(n_epochs):
             y = y.to(device)
             t = torch.randint(0, T, (x.size(0),), device=x.device)
             noisy_x, noise = addNoise(x, t, betaSchedule)  # Create our noisy x
-            pred = net(noisy_x, t, y)
+            pred = net(noisy_x, t, T, y)
             loss = loss_fn(pred, noise)
             testLoss += loss.item()
     
     avgLoss = testLoss / len(test_loader)
     print(f"Test Loss: {avgLoss:.4f}")
+
+torch.save(net.state_dict(), 'model_weights.pth')
