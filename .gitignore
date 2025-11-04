@@ -3,7 +3,6 @@ data/
 *.png
 *.jpg
 __pycache__/
-*.pth
 bin/
 include/
 lib/
