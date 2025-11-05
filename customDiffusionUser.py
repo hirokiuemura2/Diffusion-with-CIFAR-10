@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 net  = UNet().to(device)
-net.load_state_dict(torch.load('model_weights2.pth', weights_only=True))
+net.load_state_dict(torch.load('model_weights2.pth', weights_only=True, map_location = torch.device(device)))
 net.eval()
 
 sample = torch.randn(1, 3, 32, 32).to(device)
