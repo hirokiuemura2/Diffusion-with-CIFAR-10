@@ -9,7 +9,7 @@ def main():
     channel_size = 32 # Change Channel Count Here
     device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
     net  = UNet(mid_channels=channel_size).to(device) 
-    net.load_state_dict(torch.load(f'model_weights_{channel_size}Channels.pth', weights_only=True)) # Change model_weights filename if needed
+    net.load_state_dict(torch.load(f'model_weights_{channel_size}Channels.pth', weights_only=True, map_location=device)) # Change model_weights filename if needed
     net.eval()
 
     T = 2
