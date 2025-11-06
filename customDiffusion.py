@@ -19,11 +19,11 @@ def sinEmb(t, T, dim):
 class FiLM(nn.Module):
     def __init__(self, in_channels, time_emb_dim):
         super().__init__()
-        self.linear = nn.Linear(time_emb_dim, in_channels * 2)
+        self.linear = nn.Linear(in_channels, time_emb_dim * 2)
 
     def forward(self, emb):
         # emb: [batch, in_dim]
-        gamma_beta = self.mlp(emb)  # [batch, 2*out_dim]
+        gamma_beta = self.linear(emb)  # [batch, 2*out_dim]
         gamma, beta = gamma_beta.chunk(2, dim=1)
         return gamma, beta
 
@@ -39,13 +39,19 @@ class UNet(nn.Module):
             nn.SiLU(),
             nn.Linear(8 * mid_channels, 2 * mid_channels)
         )
-        self.time_emb2 = nn.Sequential(
-            nn.Linear(2 * mid_channels, 8 * mid_channels),
-            nn.SiLU(),
-            nn.Linear(8 * mid_channels, 4 * mid_channels)
-        )
         self.prompt_emb = nn.Embedding(10, mid_channels * 2)
-        self.prompt_emb2 = nn.Embedding(10, mid_channels * 4)
+
+        self.time_filmUp = nn.ModuleList(
+            [
+                FiLM(2 * mid_channels, mid_channels),
+                FiLM(2 * mid_channels, 2 * mid_channels),
+                FiLM(2 * mid_channels, 4 * mid_channels),
+                FiLM(2 * mid_channels, 6 * mid_channels),
+                FiLM(2 * mid_channels, 4 * mid_channels),
+                FiLM(2 * mid_channels, 4 * mid_channels),
+                FiLM(2 * mid_channels, 2 * mid_channels)
+            ]
+        )
 
         self.down_layers = nn.ModuleList(
             [
@@ -103,28 +109,28 @@ class UNet(nn.Module):
         self.finalLayer = nn.Conv2d(out_channels * 2, out_channels, kernel_size=5, padding=2)
     
     def forward(self, x, t, T, prompt):
-        # use stored mid_channels instead of accessing attributes on Sequential
         t_emb = sinEmb(t, T, self.mid_channels * 2)
         t_emb = self.time_emb(t_emb)
-        t_emb2 = self.time_emb2(t_emb)
         p_emb = self.prompt_emb(prompt)
-        p_emb2 = self.prompt_emb2(prompt)
-        h = []
+        h = []  # For skip connections
+
+
         for i, l in enumerate(self.down_layers):
-            x = l(x)  # Through the layer and the activation function
-            if i == 1:
-                x = x + t_emb[:,:,None,None] + p_emb[:,:,None,None]   #time embedding layer
-            elif i == 2:
-                x = x + t_emb2[:,:,None,None] + p_emb2[:,:,None,None] # second time embedding layer
-            if i < 3:  # For all but the third (final) down layer:
-                h.append(x)  # Storing output for skip connection
-                x = self.downscale(x)  # Downscale ready for the next layer
+            x = l(x)  # Layer application, normalization, activation
+            gamma, beta = self.time_filmUp[i](t_emb + p_emb)
+            x = gamma[:, :, None, None] * x + beta[:, :, None, None] # FiLM conditioning
+            if i < 3:
+                h.append(x)  # Skip connection storage
+                x = self.downscale(x)
         x = self.dropout(x)
 
         for i, l in enumerate(self.up_layers):
-            if i > 0:  # For all except the first up layer
-                x = self.upscale(x)  # Upscale
-                x = torch.cat([x, h.pop()], dim=1) # Fetching stored output (skip connection)
+            if i > 0: 
+                x = self.upscale(x)
+                x = torch.cat([x, h.pop()], dim=1) # Skip
             x = l(x)
+            if (i < len(self.up_layers) - 1):
+                gamma, beta = self.time_filmUp[i + 4](t_emb + p_emb) #conditioning
+                x = gamma[:, :, None, None] * x + beta[:, :, None, None]
         x = self.finalLayer(x)
         return x

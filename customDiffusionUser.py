@@ -6,29 +6,30 @@ import torchvision.transforms as Tr
 import torchvision
 
 def main():
+    channel_size = 32 # Change Channel Count Here
     device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
-    net  = UNet().to(device)
-    net.load_state_dict(torch.load('model_weights2.pth', weights_only=True))
+    net  = UNet(mid_channels=channel_size).to(device) 
+    net.load_state_dict(torch.load(f'model_weights_{channel_size}Channels.pth', weights_only=True)) # Change model_weights filename if needed
     net.eval()
 
-    T = 5
+    T = 2
     sample = torch.randn(1, 3, 32, 32).to(device)
     
     with torch.no_grad():
-        for i in reversed(range(T)):
+        for i in range(T, 1, -1):
             print(i)
-            t = torch.tensor(i + 899, device=device)
+            t = torch.tensor([T - i], device=device)
             prompt = torch.tensor([2], device=device)  # Example prompt
             output = net(sample, t, T, prompt)
-            sample = removeNoise(sample, t, output, betaSchedule).to(device).clamp(-1, 1)
-            print(sample.min(), sample.max(), sample.mean(), sample.std())
+            sample = removeNoise(sample, t, output, betaSchedule).to(device)
+            # print(sample.min(), sample.max(), sample.mean(), sample.std())
         # print(output.shape)
         # print(output)
         # print(output.min(), output.max())
         # print(output.mean(), output.std())
-        if preds.shape != x_t.shape:
-            if preds.ndim == 4 and preds.shape[0] == x_t.shape[0] and preds.shape[-1] == x_t.shape[1]:
-                preds = preds.permute(0, 3, 1, 2).contiguous()
+        # if preds.shape != sample.shape:
+        #     if preds.ndim == 4 and preds.shape[0] == sample.shape[0] and preds.shape[-1] == sample.shape[1]:
+        #         preds = preds.permute(0, 3, 1, 2).contiguous()
     sample = sample.to("cpu")
 
     # Visualize the input
