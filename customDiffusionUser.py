@@ -6,17 +6,17 @@ import torchvision.transforms as Tr
 import torchvision
 
 def main():
-    channel_size = 32 # Change Channel Count Here
+    channel_size = 16 # Change Channel Count Here
     device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
     net  = UNet(mid_channels=channel_size).to(device) 
     net.load_state_dict(torch.load(f'model_weights_{channel_size}Channels.pth', weights_only=True, map_location=device)) # Change model_weights filename if needed
     net.eval()
 
-    T = 2
+    T = 1000
     sample = torch.randn(1, 3, 32, 32).to(device)
     
     with torch.no_grad():
-        for i in range(T, 1, -1):
+        for i in range(T, 0, -1):
             print(i)
             t = torch.tensor([T - i], device=device)
             prompt = torch.tensor([2], device=device)  # Example prompt

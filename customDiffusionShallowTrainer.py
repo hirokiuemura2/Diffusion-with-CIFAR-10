@@ -2,11 +2,11 @@ import torch
 import torchvision.transforms as Tr
 import torch.nn as nn
 import time
-from customDiffusion import UNet
+from customDiffusionShallow import UNet
 from imageFunctions import transform, addNoise, betaSchedule, T, train_loader, test_loader
 
 device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
-n_epochs = 500
+n_epochs = 200
 
 losses = []
 channelSize = 24 # Change Channel Count Here
@@ -19,13 +19,12 @@ opt = torch.optim.Adam(net.parameters(), lr=1e-3)
 for epoch in range(n_epochs):
     if epoch == 10:
         opt = torch.optim.Adam(net.parameters(), lr=4e-5)
-    if epoch == 80: opt = torch.optim.Adam(net.parameters(), lr=8e-6)
-    if epoch == 200: opt = torch.optim.Adam(net.parameters(), lr=2e-6)
+    if epoch == 50: opt = torch.optim.Adam(net.parameters(), lr=2e-6)
+    if epoch == 100: opt = torch.optim.Adam(net.parameters(), lr=1e-7)
     net.train()
     startTime = time.time()
+    size = len(train_loader.dataset)
     for batch, (x, y) in enumerate(train_loader):
-        size = len(train_loader.dataset)
-
         x = x.to(device)  # Data on the GPU
         y = y.to(device)
         t = torch.randint(0, T, (x.size(0),), device=x.device) # random timesteps

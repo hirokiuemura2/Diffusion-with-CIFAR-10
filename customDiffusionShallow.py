@@ -46,12 +46,11 @@ class UNet(nn.Module):
                 FiLM(2 * mid_channels, mid_channels),
                 FiLM(2 * mid_channels, 2 * mid_channels),
                 FiLM(2 * mid_channels, 4 * mid_channels),
-                FiLM(2 * mid_channels, 4 * mid_channels),
-                FiLM(2 * mid_channels, 6 * mid_channels),
-                FiLM(2 * mid_channels, 4 * mid_channels),
+                # FiLM(2 * mid_channels, 6 * mid_channels),
+                # FiLM(2 * mid_channels, 4 * mid_channels),
                 FiLM(2 * mid_channels, 4 * mid_channels),
                 FiLM(2 * mid_channels, 2 * mid_channels),
-                FiLM(2 * mid_channels, mid_channels),
+                FiLM(2 * mid_channels, mid_channels)
             ]
         )
 
@@ -71,16 +70,6 @@ class UNet(nn.Module):
                     nn.Conv2d(mid_channels * 2, mid_channels * 4, kernel_size=5, padding=2),
                     nn.BatchNorm2d(mid_channels * 4),
                     nn.SiLU()
-                ),
-                nn.Sequential(
-                    nn.Conv2d(mid_channels * 4, mid_channels * 4, kernel_size=5, padding=2),
-                    nn.BatchNorm2d(mid_channels * 6),
-                    nn.SiLU()
-                ),
-                nn.Sequential(
-                    nn.Conv2d(mid_channels * 4, mid_channels * 6, kernel_size=5, padding=2),
-                    nn.BatchNorm2d(mid_channels * 4),
-                    nn.SiLU()
                 )
             ]
             
@@ -88,17 +77,7 @@ class UNet(nn.Module):
         self.up_layers = torch.nn.ModuleList(
             [
                 nn.Sequential(
-                    nn.Conv2d(mid_channels * 6, mid_channels * 4, kernel_size=5, padding=2),
-                    nn.BatchNorm2d(mid_channels * 4),
-                    nn.SiLU()
-                ),
-                nn.Sequential(
-                    nn.Conv2d(mid_channels * 8, mid_channels * 4, kernel_size=5, padding=2),
-                    nn.BatchNorm2d(mid_channels * 2),
-                    nn.SiLU()
-                ),
-                nn.Sequential(
-                    nn.Conv2d(mid_channels * 8, mid_channels * 4, kernel_size=5, padding=2),
+                    nn.Conv2d(mid_channels * 4, mid_channels * 4, kernel_size=5, padding=2),
                     nn.BatchNorm2d(mid_channels * 4),
                     nn.SiLU()
                 ),
@@ -109,15 +88,15 @@ class UNet(nn.Module):
                 ),
                 nn.Sequential(
                     nn.Conv2d(mid_channels * 3, mid_channels, kernel_size=5, padding=2),
-                    nn.BatchNorm2d(out_channels * 2),
+                    nn.BatchNorm2d(mid_channels),
                     nn.SiLU()
                 )
             ]
         )
         self.downscale = nn.MaxPool2d(2)
         self.upscale = nn.Upsample(scale_factor=2, mode='nearest')
-        self.dropout = nn.Dropout2d(0.15)
-        self.finalLayer = nn.Conv2d(mid_channels, out_channels, kernel_size=5, padding=2, bias = True)
+        self.dropout = nn.Dropout2d(0.1)
+        self.finalLayer = nn.Conv2d(mid_channels, out_channels, kernel_size=5, padding=2)
     
     def forward(self, x, t, T, prompt):
         t_emb = sinEmb(t, T, self.mid_channels * 2)
@@ -132,18 +111,15 @@ class UNet(nn.Module):
             x = gamma[:, :, None, None] * x + beta[:, :, None, None] # FiLM conditioning
             if i < len(self.down_layers) - 1:  # For all but the last down layer:
                 h.append(x)  # Skip connection storage
-            if i > 0:  # Downscale after first layer
                 x = self.downscale(x)
         x = self.dropout(x)
 
         for i, l in enumerate(self.up_layers):
-            if i > 0 and i < len(self.up_layers - 1):
-                    x = self.upscale(x)
-            if i > 0:
+            if i > 0: 
+                x = self.upscale(x)
                 x = torch.cat([x, h.pop()], dim=1) # Skip
             x = l(x)
-            if (i < len(self.up_layers) - 1):
-                gamma, beta = self.time_filmUp[i + 5](t_emb + p_emb) #conditioning
-                x = gamma[:, :, None, None] * x + beta[:, :, None, None]
+            gamma, beta = self.time_filmUp[i + 3](t_emb + p_emb) #conditioning
+            x = gamma[:, :, None, None] * x + beta[:, :, None, None]
         x = self.finalLayer(x)
         return x

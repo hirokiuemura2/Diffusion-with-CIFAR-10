@@ -6,7 +6,7 @@ import torch.nn.functional as F
 
 device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 T = 1000
-batch_size = 128
+batch_size = 256
 
 transform = Tr.Compose([
     Tr.Resize((32,32)),    # optional, sizes should already match 32X32
@@ -26,9 +26,9 @@ posterior_variance = (betaSchedule * (1.0 - alphas_cumulProd_prev) / (1.0 - alph
 posterior_log_variance_clipped = torch.log(torch.clamp(posterior_variance, min=1e-20)).to(device)
 
 train_data = CIFAR10(root='./data', train=True, download=True, transform=transform)
-train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
+train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
 test_data = CIFAR10(root='./data', train=False, download=True, transform=transform)
-test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False)
+test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
 def unnormalize(x):
     x = (x + 1) / 2
@@ -61,7 +61,7 @@ def removeNoise(x_t, t, noise, betas = betaSchedule):
     log_var = posterior_log_variance_clipped[t].view(-1,1,1,1)
     var = torch.exp(log_var)
     noise = torch.randn_like(x_t)
-    mask = (t > 0).float().view(-1,1,1,1)
+    mask = (t > 1).float().view(-1,1,1,1)
     finalPred = mean + mask * torch.sqrt(var) * noise
 
     return finalPred
