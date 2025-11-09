@@ -8,9 +8,9 @@ import torchvision
 def main():
     channel_size = 32 # Change Channel Count Here
     device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
-    # net  = UNet(mid_channels=channel_size).to(device) 
-    # net.load_state_dict(torch.load(f"model_weights_{channel_size}Channels.pth", weights_only=True, map_location=device)) # Change model_weights filename if needed
-    # net.eval()
+    net  = UNet(mid_channels=channel_size).to(device) 
+    net.load_state_dict(torch.load(f"model_weights{channel_size}Channels.pth", weights_only=True, map_location=device)) # Change model_weights filename if needed
+    net.eval()
 
     T = 1000
 
@@ -20,18 +20,42 @@ def main():
     x = x.to(device)
     y = y.to(device)
     # print(x.min(), x.max(), x.mean(), x.std())
+    indices = [1, 2, 3, 4, 5, 6, 7, 8, 9, 
+               10, 11, 12, 13, 14, 15, 20, 25, 30, 35, 40, 45, 
+               50, 60, 70, 80, 90, 
+               100, 150, 200, 300, 400, 500, 700, 1000]
     
-    # Corrupt with a range of amounts
-    # t = torch.randint(30,T,(x.size(0),), device=x.device)
-    t = torch.tensor([64] * x.size(0), device=x.device)
-    noised_x, noise = addNoise(x, t, betaSchedule)
-    # newImages = noised_x.clone()
-    print(x[0].shape)
-    x0_batch = x[0].unsqueeze(0).repeat(202, 1, 1, 1)
-    print(x0_batch.shape)
+    t = torch.tensor(indices, device=x.device).long()
     
-
-#     denoiseCount = 64  # How many denoising steps to show
+    x0_batch = x[0].unsqueeze(0).repeat(t.size(0), 1, 1, 1)  # Create a batch of the same image
+    y0_batch = y[0].unsqueeze(0).repeat(t.size(0))  # Create a batch of the same label
+    finalImages = x[0].unsqueeze(0).repeat(t.size(0) + 2, 1, 1, 1)
+    x0_batch, noise = addNoise(x0_batch, t, betaSchedule)
+    finalImages = x[0].unsqueeze(0).repeat(t.size(0) + 2, 1, 1, 1)
+    finalImages[1] = x0_batch[0].clone().detach()
+    with torch.no_grad():
+        for i in range(1, T):
+            preds = net(x0_batch, t, T, y0_batch)
+            x0_batch = removeNoise(x0_batch, t, preds, betaSchedule)
+            if (indices[i] == i):
+                finalImages[i + 2] = x0_batch[i].clone().detach()
+    
+    input_img = x[0].squeeze(0).cpu()
+    input_img = (input_img + 1) / 2  # Unnormalize to [0, 1]
+    # input_img = input_img.clamp(0, 1)
+    input_img = input_img.permute(1, 2, 0).numpy()  # Change to HWC for plotting
+    plt.imshow(input_img)
+    plt.axis('off')
+    plt.savefig("img1.png")
+    
+    input_img = x0_batch[1].squeeze(0).cpu()
+    input_img = (input_img + 1) / 2  # Unnormalize to [0, 1]
+    # input_img = input_img.clamp(0, 1)
+    input_img = input_img.permute(1, 2, 0).numpy()  # Change to HWC for plotting
+    plt.imshow(input_img)
+    plt.axis('off')
+    plt.savefig("img2.png")
+    
 
 #     fig, axs = plt.subplots(denoiseCount + 2, 1, figsize=(12, 7))
 #     axs[0].set_title("Input data")
