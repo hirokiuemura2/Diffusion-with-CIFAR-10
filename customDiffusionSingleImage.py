@@ -31,14 +31,13 @@ def main():
     y0_batch = y[0].unsqueeze(0).repeat(t.size(0))  # Create a batch of the same label
     finalImages = x[0].unsqueeze(0).repeat(t.size(0) + 2, 1, 1, 1)
     x0_batch, noise = addNoise(x0_batch, t, betaSchedule)
-    finalImages = x[0].unsqueeze(0).repeat(t.size(0) + 2, 1, 1, 1)
-    finalImages[1] = x0_batch[0].clone().detach()
+    finalImages[1] = x0_batch[0].clone().detach()   # second image is noisy image
     with torch.no_grad():
         for i in range(1, T):
             preds = net(x0_batch, t, T, y0_batch)
             x0_batch = removeNoise(x0_batch, t, preds, betaSchedule)
-            if (indices[i] == i):
-                finalImages[i + 2] = x0_batch[i].clone().detach()
+            # if (indices[i] == i):  # fix later
+            #     finalImages[i + 2] = x0_batch[i].clone().detach()
     
     input_img = x[0].squeeze(0).cpu()
     input_img = (input_img + 1) / 2  # Unnormalize to [0, 1]
